@@ -1,4 +1,4 @@
-import { format, differenceInDays, parseISO } from 'date-fns'
+import { format, differenceInDays, parseISO, subDays } from 'date-fns'
 
 const STORAGE_KEY = '75smartrules'
 
@@ -84,6 +84,63 @@ export function isStorageAvailable() {
   } catch (e) {
     return false
   }
+}
+
+export function checkForReset(data) {
+  if (!data || !data.challenge.startDate) return { needsReset: false }
+
+  const today = new Date()
+  const yesterday = subDays(today, 1)
+  const dayBefore = subDays(today, 2)
+
+  const yesterdayKey = format(yesterday, 'yyyy-MM-dd')
+  const dayBeforeKey = format(dayBefore, 'yyyy-MM-dd')
+
+  const yesterdayLog = data.dailyLogs[yesterdayKey]
+  const dayBeforeLog = data.dailyLogs[dayBeforeKey]
+
+  // Check if both yesterday and day before were incomplete
+  const yesterdayIncomplete = !yesterdayLog || !yesterdayLog.allComplete
+  const dayBeforeIncomplete = !dayBeforeLog || !dayBeforeLog.allComplete
+
+  // Only trigger reset if we're past day 2 and both days were missed
+  const currentDay = calculateCurrentDay(data.challenge.startDate)
+  if (currentDay > 2 && yesterdayIncomplete && dayBeforeIncomplete) {
+    return { needsReset: true, missedDays: 2 }
+  }
+
+  return { needsReset: false }
+}
+
+export function resetChallenge(data) {
+  const newData = {
+    ...data,
+    challenge: {
+      ...data.challenge,
+      startDate: format(new Date(), 'yyyy-MM-dd'),
+      currentDay: 1,
+      currentStreak: 0,
+      totalResets: data.challenge.totalResets + 1,
+    },
+  }
+  saveData(newData)
+  return newData
+}
+
+export function updateRules(data, newRules) {
+  const newData = {
+    ...data,
+    rules: newRules,
+    challenge: {
+      ...data.challenge,
+      startDate: format(new Date(), 'yyyy-MM-dd'),
+      currentDay: 1,
+      currentStreak: 0,
+      totalResets: data.challenge.totalResets + 1,
+    },
+  }
+  saveData(newData)
+  return newData
 }
 
 export { DEFAULT_RULES }

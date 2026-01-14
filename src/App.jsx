@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react'
-import { loadData, initializeData, isStorageAvailable, calculateCurrentDay } from './utils/storage'
+import { loadData, initializeData, isStorageAvailable, calculateCurrentDay, checkForReset, resetChallenge } from './utils/storage'
 import TasksTab from './components/TasksTab'
+import ResetModal from './components/ResetModal'
 
 function App() {
   const [activeTab, setActiveTab] = useState('tasks')
   const [data, setData] = useState(null)
   const [storageError, setStorageError] = useState(false)
+  const [showResetModal, setShowResetModal] = useState(false)
+  const [missedDays, setMissedDays] = useState(0)
 
   useEffect(() => {
     if (!isStorageAvailable()) {
@@ -15,6 +18,12 @@ function App() {
 
     const stored = loadData()
     if (stored) {
+      // Check for reset condition
+      const resetCheck = checkForReset(stored)
+      if (resetCheck.needsReset) {
+        setMissedDays(resetCheck.missedDays)
+        setShowResetModal(true)
+      }
       setData(stored)
     }
   }, [])
@@ -22,6 +31,12 @@ function App() {
   const handleStartChallenge = (rules) => {
     const newData = initializeData(rules)
     setData(newData)
+  }
+
+  const handleResetAcknowledge = () => {
+    const newData = resetChallenge(data)
+    setData(newData)
+    setShowResetModal(false)
   }
 
   if (storageError) {
@@ -120,6 +135,14 @@ function App() {
           </>
         )}
       </main>
+
+      {/* Reset Modal */}
+      {showResetModal && (
+        <ResetModal
+          missedDays={missedDays}
+          onAcknowledge={handleResetAcknowledge}
+        />
+      )}
     </div>
   )
 }
