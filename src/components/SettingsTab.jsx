@@ -3,27 +3,18 @@ import {
   updateStartDate,
   updateRulesWithoutReset,
   updateRules,
-  resetChallenge,
   clearAllData,
-  clearCloudData,
   calculateCurrentDay,
-  migrateToCloud,
 } from "../utils/storage";
-import { useAuth } from "../contexts/AuthContext";
 import { ConfirmModal, ModalOverlay, ModalContainer } from "./ui/Modal";
 import { RulesEditor } from "./ui/RulesEditor";
-import AuthModal from "./AuthModal";
 
 function SettingsTab({ data, setData }) {
-  const { user, isGuest, isConfigured, signOut } = useAuth();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showDateConfirm, setShowDateConfirm] = useState(false);
   const [pendingDate, setPendingDate] = useState(null);
   const [showEditRules, setShowEditRules] = useState(false);
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [migrating, setMigrating] = useState(false);
-  const [migrateMessage, setMigrateMessage] = useState(null);
 
   const currentDay = calculateCurrentDay(data.challenge.startDate);
 
@@ -39,15 +30,13 @@ function SettingsTab({ data, setData }) {
   };
 
   const handleResetChallenge = () => {
-    setData(resetChallenge(data));
+    clearAllData();
+    setData(null);
     setShowResetConfirm(false);
   };
 
-  const handleClearAllData = async () => {
+  const handleClearAllData = () => {
     clearAllData();
-    if (user && isConfigured) {
-      await clearCloudData(user.id);
-    }
     setData(null);
     setShowClearConfirm(false);
   };
@@ -60,85 +49,25 @@ function SettingsTab({ data, setData }) {
     setShowEditRules(false);
   };
 
-  const handleMigrateToCloud = async () => {
-    if (!user) return;
-    setMigrating(true);
-    setMigrateMessage(null);
-    const result = await migrateToCloud(user.id);
-    setMigrateMessage(result);
-    setMigrating(false);
-  };
-
   return (
     <div className="space-y-6">
-      {/* Account Section - Only show if Supabase is configured */}
-      {isConfigured && (
-        <SettingsCard title="Account" variant="accent">
-          {isGuest ? (
-            <>
-              <p className="text-gray-400 text-sm mb-4">
-                Sign up to sync your progress across devices and never lose your data.
-              </p>
-              <button
-                onClick={() => setShowAuthModal(true)}
-                className="w-full py-3 bg-white text-black font-medium rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                Sign Up to Sync
-              </button>
-            </>
-          ) : (
-            <>
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-white text-sm">{user.email}</p>
-                  <p className="text-green-500 text-xs mt-1">✓ Syncing to cloud</p>
-                </div>
-                <button
-                  onClick={signOut}
-                  className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-gray-800 hover:border-gray-700 rounded-lg transition-all"
-                >
-                  Sign Out
-                </button>
-              </div>
-              
-              {migrateMessage && (
-                <div className={`p-3 rounded-lg mb-4 ${
-                  migrateMessage.success 
-                    ? "bg-green-950/30 border border-green-800" 
-                    : "bg-red-950/30 border border-red-800"
-                }`}>
-                  <p className={migrateMessage.success ? "text-green-400 text-sm" : "text-red-400 text-sm"}>
-                    {migrateMessage.message || migrateMessage.error}
-                  </p>
-                </div>
-              )}
-
-              <button
-                onClick={handleMigrateToCloud}
-                disabled={migrating}
-                className="w-full py-3 border border-gray-700 text-gray-300 rounded-lg hover:border-gray-600 hover:text-white transition-all disabled:opacity-50"
-              >
-                {migrating ? "Syncing..." : "Sync Local Data to Cloud"}
-              </button>
-            </>
-          )}
-        </SettingsCard>
-      )}
-
       {/* Change Start Date */}
       <SettingsCard title="Change Start Date">
         <p className="text-gray-400 text-sm mb-4">
-          Adjust when your 75-day challenge began. This will recalculate your current day without losing your daily logs.
+          Adjust when your 75-day challenge began. This will recalculate your
+          current day and reset your daily logs.
         </p>
         <div className="flex items-center gap-4">
           <input
             type="date"
             value={data.challenge.startDate}
             onChange={handleDateChange}
-            className="flex-1 px-4 py-3 rounded-lg text-sm bg-gray-900 border border-gray-800 text-white focus:ring-0 focus:border-gray-600 [color-scheme:dark]"
+            className="flex-1 px-4 py-3 rounded-lg text-sm bg-gray-900 border border-gray-800 text-white focus:ring-0 focus:border-gray-600 scheme-dark"
           />
           <div className="text-right">
-            <p className="text-white text-lg font-medium">Day {Math.min(currentDay, 75)}</p>
+            <p className="text-white text-lg font-medium">
+              Day {Math.min(currentDay, 75)}
+            </p>
             <p className="text-gray-600 text-xs">of 75</p>
           </div>
         </div>
@@ -147,7 +76,8 @@ function SettingsTab({ data, setData }) {
       {/* Edit Rules */}
       <SettingsCard title="Edit Rules">
         <p className="text-gray-400 text-sm mb-4">
-          Modify your daily rules. You can choose to keep your progress or reset the challenge.
+          Modify your daily rules. You can choose to keep your progress or reset
+          the challenge.
         </p>
         <button
           onClick={() => setShowEditRules(true)}
@@ -160,20 +90,22 @@ function SettingsTab({ data, setData }) {
       {/* Reset Challenge */}
       <SettingsCard title="Reset Challenge">
         <p className="text-gray-400 text-sm mb-4">
-          Start fresh from Day 1. Your history will be preserved but your streak will reset.
+          Start fresh and pick a new start date. You'll go back to setup to
+          choose when your challenge begins.
         </p>
         <button
           onClick={() => setShowResetConfirm(true)}
           className="w-full py-3 border border-amber-800 text-amber-500 rounded-lg hover:border-amber-700 hover:bg-amber-950/30 transition-all"
         >
-          Reset to Day 1
+          Reset Challenge
         </button>
       </SettingsCard>
 
       {/* Danger Zone */}
       <SettingsCard title="Danger Zone" variant="danger">
         <p className="text-gray-400 text-sm mb-4">
-          Permanently delete all your data and start completely over. This cannot be undone.
+          Permanently delete all your data and start completely over. This
+          cannot be undone.
         </p>
         <button
           onClick={() => setShowClearConfirm(true)}
@@ -187,7 +119,7 @@ function SettingsTab({ data, setData }) {
       {showDateConfirm && (
         <ConfirmModal
           title="Change Start Date?"
-          message={`This will recalculate your current day based on the new start date (${pendingDate}). Your daily logs will be preserved.`}
+          message={`This will set your challenge start date to ${pendingDate} and clear your daily logs. You'll restart tracking from this date.`}
           confirmText="Change Date"
           onConfirm={confirmDateChange}
           onCancel={() => {
@@ -200,7 +132,7 @@ function SettingsTab({ data, setData }) {
       {showResetConfirm && (
         <ConfirmModal
           title="Reset Challenge?"
-          message="This will restart your challenge from Day 1. Your total resets count will increase by 1. Your history will be preserved."
+          message="This will clear your progress and take you back to setup where you can choose a new start date for your challenge."
           confirmText="Reset Challenge"
           confirmStyle="amber"
           onConfirm={handleResetChallenge}
@@ -226,10 +158,6 @@ function SettingsTab({ data, setData }) {
           onClose={() => setShowEditRules(false)}
         />
       )}
-
-      {showAuthModal && (
-        <AuthModal onClose={() => setShowAuthModal(false)} />
-      )}
     </div>
   );
 }
@@ -244,7 +172,9 @@ function SettingsCard({ title, variant = "default", children }) {
 
   return (
     <div className={`border ${style.border} rounded-lg p-4`}>
-      <h3 className={`text-xs ${style.title} uppercase tracking-wider mb-4`}>{title}</h3>
+      <h3 className={`text-xs ${style.title} uppercase tracking-wider mb-4`}>
+        {title}
+      </h3>
       {children}
     </div>
   );
@@ -256,7 +186,9 @@ function EditRulesModal({ rules, onSave, onClose }) {
       <ModalContainer maxWidth="max-w-lg">
         <div className="p-6 border-b border-gray-800">
           <h2 className="text-lg font-medium text-white">Edit Rules</h2>
-          <p className="text-sm text-gray-500 mt-1">Modify your daily rules (3-8 rules)</p>
+          <p className="text-sm text-gray-500 mt-1">
+            Modify your daily rules (3-8 rules)
+          </p>
         </div>
         <div className="p-6">
           <RulesEditor

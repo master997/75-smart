@@ -1,5 +1,4 @@
 import { format, differenceInDays, parseISO, subDays } from "date-fns";
-import { supabase } from "./supabase";
 
 const STORAGE_KEY = "75smartrules";
 const DATE_FORMAT = "yyyy-MM-dd";
@@ -62,111 +61,6 @@ export const isStorageAvailable = () => {
     const test = "__storage_test__";
     localStorage.setItem(test, test);
     localStorage.removeItem(test);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-// ============================================
-// CLOUD STORAGE OPERATIONS (Supabase)
-// ============================================
-
-export const loadCloudData = async (userId) => {
-  if (!supabase || !userId) return null;
-
-  try {
-    const { data, error } = await supabase
-      .from("challenges")
-      .select("data")
-      .eq("user_id", userId)
-      .single();
-
-    if (error && error.code !== "PGRST116") {
-      console.error("Error loading cloud data:", error);
-      return null;
-    }
-
-    return data?.data || null;
-  } catch {
-    return null;
-  }
-};
-
-export const saveCloudData = async (userId, challengeData) => {
-  if (!supabase || !userId) return false;
-
-  try {
-    const { error } = await supabase
-      .from("challenges")
-      .upsert(
-        {
-          user_id: userId,
-          data: challengeData,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id" }
-      );
-
-    if (error) {
-      console.error("Error saving cloud data:", error);
-      return false;
-    }
-
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-export const migrateToCloud = async (userId) => {
-  if (!supabase || !userId) return { success: false, error: "Not configured" };
-
-  try {
-    // Get local data
-    const localData = loadData();
-    if (!localData) {
-      return { success: true, message: "No local data to migrate" };
-    }
-
-    // Check if cloud already has data
-    const cloudData = await loadCloudData(userId);
-    if (cloudData) {
-      return { 
-        success: false, 
-        error: "Cloud already has data. Clear cloud data first or choose to keep it." 
-      };
-    }
-
-    // Save local data to cloud
-    const saved = await saveCloudData(userId, localData);
-    if (!saved) {
-      return { success: false, error: "Failed to save to cloud" };
-    }
-
-    // Optionally clear local data after migration
-    // clearAllData();
-
-    return { success: true, message: "Data migrated to cloud" };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-};
-
-export const clearCloudData = async (userId) => {
-  if (!supabase || !userId) return false;
-
-  try {
-    const { error } = await supabase
-      .from("challenges")
-      .delete()
-      .eq("user_id", userId);
-
-    if (error) {
-      console.error("Error clearing cloud data:", error);
-      return false;
-    }
-
     return true;
   } catch {
     return false;
@@ -256,6 +150,7 @@ export const resetChallenge = (data) => {
       currentStreak: 0,
       totalResets: data.challenge.totalResets + 1,
     },
+    dailyLogs: {},
   };
   saveData(newData);
   return newData;
@@ -268,6 +163,7 @@ export const updateStartDate = (data, newDate) => {
       ...data.challenge,
       startDate: formatDate(newDate),
     },
+    dailyLogs: {},
   };
   saveData(newData);
   return newData;
@@ -284,6 +180,7 @@ export const updateRules = (data, newRules) => {
       currentStreak: 0,
       totalResets: data.challenge.totalResets + 1,
     },
+    dailyLogs: {},
   };
   saveData(newData);
   return newData;
