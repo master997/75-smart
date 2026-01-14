@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react'
-import { loadData, initializeData, isStorageAvailable, calculateCurrentDay, checkForReset, resetChallenge } from './utils/storage'
+import { loadData, saveData, initializeData, isStorageAvailable, calculateCurrentDay, checkForReset, resetChallenge } from './utils/storage'
 import TasksTab from './components/TasksTab'
 import CalendarTab from './components/CalendarTab'
 import StatsTab from './components/StatsTab'
 import ResetModal from './components/ResetModal'
+import VictoryModal from './components/VictoryModal'
 
 function App() {
   const [activeTab, setActiveTab] = useState('tasks')
   const [data, setData] = useState(null)
   const [storageError, setStorageError] = useState(false)
   const [showResetModal, setShowResetModal] = useState(false)
+  const [showVictoryModal, setShowVictoryModal] = useState(false)
   const [missedDays, setMissedDays] = useState(0)
 
   useEffect(() => {
@@ -26,6 +28,11 @@ function App() {
         setMissedDays(resetCheck.missedDays)
         setShowResetModal(true)
       }
+      // Check for victory (day 75 completed)
+      const day = calculateCurrentDay(stored.challenge.startDate)
+      if (day >= 75 && !stored.victoryShown) {
+        setShowVictoryModal(true)
+      }
       setData(stored)
     }
   }, [])
@@ -39,6 +46,13 @@ function App() {
     const newData = resetChallenge(data)
     setData(newData)
     setShowResetModal(false)
+  }
+
+  const handleVictoryClose = () => {
+    const newData = { ...data, victoryShown: true }
+    saveData(newData)
+    setData(newData)
+    setShowVictoryModal(false)
   }
 
   if (storageError) {
@@ -139,6 +153,14 @@ function App() {
         <ResetModal
           missedDays={missedDays}
           onAcknowledge={handleResetAcknowledge}
+        />
+      )}
+
+      {/* Victory Modal */}
+      {showVictoryModal && (
+        <VictoryModal
+          data={data}
+          onClose={handleVictoryClose}
         />
       )}
     </div>
