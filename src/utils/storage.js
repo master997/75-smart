@@ -1,4 +1,5 @@
 import { format, differenceInDays, parseISO, subDays } from "date-fns";
+import { supabase } from "./supabase";
 
 const STORAGE_KEY = "75smartrules";
 const DATE_FORMAT = "yyyy-MM-dd";
@@ -25,7 +26,10 @@ const getDayLog = (data, date) => {
   return data.dailyLogs[key];
 };
 
-// Core storage operations
+// ============================================
+// LOCAL STORAGE OPERATIONS
+// ============================================
+
 export const loadData = () => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -64,7 +68,115 @@ export const isStorageAvailable = () => {
   }
 };
 
-// Date utilities
+// ============================================
+// CLOUD STORAGE OPERATIONS (Supabase)
+// ============================================
+
+export const loadCloudData = async (userId) => {
+  if (!supabase || !userId) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from("challenges")
+      .select("data")
+      .eq("user_id", userId)
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      console.error("Error loading cloud data:", error);
+      return null;
+    }
+
+    return data?.data || null;
+  } catch {
+    return null;
+  }
+};
+
+export const saveCloudData = async (userId, challengeData) => {
+  if (!supabase || !userId) return false;
+
+  try {
+    const { error } = await supabase
+      .from("challenges")
+      .upsert(
+        {
+          user_id: userId,
+          data: challengeData,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" }
+      );
+
+    if (error) {
+      console.error("Error saving cloud data:", error);
+      return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const migrateToCloud = async (userId) => {
+  if (!supabase || !userId) return { success: false, error: "Not configured" };
+
+  try {
+    // Get local data
+    const localData = loadData();
+    if (!localData) {
+      return { success: true, message: "No local data to migrate" };
+    }
+
+    // Check if cloud already has data
+    const cloudData = await loadCloudData(userId);
+    if (cloudData) {
+      return { 
+        success: false, 
+        error: "Cloud already has data. Clear cloud data first or choose to keep it." 
+      };
+    }
+
+    // Save local data to cloud
+    const saved = await saveCloudData(userId, localData);
+    if (!saved) {
+      return { success: false, error: "Failed to save to cloud" };
+    }
+
+    // Optionally clear local data after migration
+    // clearAllData();
+
+    return { success: true, message: "Data migrated to cloud" };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+};
+
+export const clearCloudData = async (userId) => {
+  if (!supabase || !userId) return false;
+
+  try {
+    const { error } = await supabase
+      .from("challenges")
+      .delete()
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("Error clearing cloud data:", error);
+      return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+// ============================================
+// DATE UTILITIES
+// ============================================
+
 export const getTodayKey = () => format(new Date(), DATE_FORMAT);
 
 export const calculateCurrentDay = (startDate) => {
@@ -72,7 +184,10 @@ export const calculateCurrentDay = (startDate) => {
   return differenceInDays(new Date(), parseISO(startDate)) + 1;
 };
 
-// Initialize new challenge
+// ============================================
+// CHALLENGE OPERATIONS
+// ============================================
+
 export const initializeData = (rules = DEFAULT_RULES, startDate = null) => {
   const data = {
     rules,
@@ -90,24 +205,23 @@ export const initializeData = (rules = DEFAULT_RULES, startDate = null) => {
   return data;
 };
 
-// Challenge status checks
 export const checkForReset = (data) => {
   if (!data?.challenge?.startDate) return { needsReset: false };
 
   const today = new Date();
   const currentDay = calculateCurrentDay(data.challenge.startDate);
-  
+
   if (currentDay <= 2) return { needsReset: false };
 
   const yesterdayLog = getDayLog(data, subDays(today, 1));
   const dayBeforeLog = getDayLog(data, subDays(today, 2));
 
-  const bothDaysMissed = 
+  const bothDaysMissed =
     (!yesterdayLog || !yesterdayLog.allComplete) &&
     (!dayBeforeLog || !dayBeforeLog.allComplete);
 
-  return bothDaysMissed 
-    ? { needsReset: true, missedDays: 2 } 
+  return bothDaysMissed
+    ? { needsReset: true, missedDays: 2 }
     : { needsReset: false };
 };
 
@@ -116,7 +230,7 @@ export const checkForWarning = (data) => {
 
   const today = new Date();
   const currentDay = calculateCurrentDay(data.challenge.startDate);
-  
+
   if (currentDay <= 1) return { showWarning: false };
 
   const yesterdayLog = getDayLog(data, subDays(today, 1));
@@ -125,7 +239,6 @@ export const checkForWarning = (data) => {
   const yesterdayIncomplete = !yesterdayLog || !yesterdayLog.allComplete;
   const dayBeforeComplete = dayBeforeLog?.allComplete === true;
 
-  // Warning: missed yesterday but not day before (first miss)
   if (yesterdayIncomplete && (currentDay <= 2 || dayBeforeComplete)) {
     return { showWarning: true, missedYesterday: true };
   }
@@ -133,7 +246,6 @@ export const checkForWarning = (data) => {
   return { showWarning: false };
 };
 
-// Challenge modifications
 export const resetChallenge = (data) => {
   const newData = {
     ...data,

@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import {
   loadData,
   saveData,
+  loadCloudData,
+  saveCloudData,
   initializeData,
   isStorageAvailable,
   calculateCurrentDay,
@@ -9,12 +11,14 @@ import {
   resetChallenge,
   getTodayKey,
 } from "./utils/storage";
+import { useAuth } from "./contexts/AuthContext";
 import TasksTab from "./components/TasksTab";
 import CalendarTab from "./components/CalendarTab";
 import StatsTab from "./components/StatsTab";
 import SettingsTab from "./components/SettingsTab";
 import ResetModal from "./components/ResetModal";
 import VictoryModal from "./components/VictoryModal";
+import AuthModal from "./components/AuthModal";
 
 const TABS = [
   { id: "tasks", label: "Tasks" },
@@ -24,56 +28,97 @@ const TABS = [
 ];
 
 function App() {
+  const { user, isGuest, loading: authLoading, isConfigured } = useAuth();
   const [activeTab, setActiveTab] = useState("tasks");
   const [data, setData] = useState(null);
   const [storageError, setStorageError] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [showVictoryModal, setShowVictoryModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [missedDays, setMissedDays] = useState(0);
+  const [dataLoading, setDataLoading] = useState(true);
 
+  // Load data based on auth state
   useEffect(() => {
-    if (!isStorageAvailable()) {
-      setStorageError(true);
-      return;
+    if (authLoading) return;
+
+    const loadUserData = async () => {
+      setDataLoading(true);
+
+      if (!isStorageAvailable()) {
+        setStorageError(true);
+        setDataLoading(false);
+        return;
+      }
+
+      let stored = null;
+
+      // If authenticated, try to load from cloud first
+      if (user && isConfigured) {
+        stored = await loadCloudData(user.id);
+      }
+
+      // Fall back to localStorage
+      if (!stored) {
+        stored = loadData();
+      }
+
+      if (stored) {
+        // Check for 2-day reset condition
+        const resetCheck = checkForReset(stored);
+        if (resetCheck.needsReset) {
+          setMissedDays(resetCheck.missedDays);
+          setShowResetModal(true);
+        }
+
+        // Check for victory
+        const day = calculateCurrentDay(stored.challenge.startDate);
+        if (day >= 75 && !stored.victoryShown) {
+          setShowVictoryModal(true);
+        }
+
+        setData(stored);
+      }
+
+      setDataLoading(false);
+    };
+
+    loadUserData();
+  }, [user, authLoading, isConfigured]);
+
+  // Wrapper to save to both local and cloud
+  const handleSetData = async (newData) => {
+    setData(newData);
+    saveData(newData); // Always save locally
+
+    // If authenticated, also save to cloud
+    if (user && isConfigured) {
+      await saveCloudData(user.id, newData);
     }
-
-    const stored = loadData();
-    if (!stored) return;
-
-    // Check for 2-day reset condition
-    const resetCheck = checkForReset(stored);
-    if (resetCheck.needsReset) {
-      setMissedDays(resetCheck.missedDays);
-      setShowResetModal(true);
-    }
-
-    // Check for victory (day 75 completed)
-    const day = calculateCurrentDay(stored.challenge.startDate);
-    if (day >= 75 && !stored.victoryShown) {
-      setShowVictoryModal(true);
-    }
-
-    setData(stored);
-  }, []);
-
-  const handleStartChallenge = (rules, startDate) => {
-    setData(initializeData(rules, startDate));
   };
 
-  const handleResetAcknowledge = () => {
-    setData(resetChallenge(data));
+  const handleStartChallenge = async (rules, startDate) => {
+    const newData = initializeData(rules, startDate);
+    await handleSetData(newData);
+  };
+
+  const handleResetAcknowledge = async () => {
+    await handleSetData(resetChallenge(data));
     setShowResetModal(false);
   };
 
-  const handleVictoryClose = () => {
+  const handleVictoryClose = async () => {
     const newData = { ...data, victoryShown: true };
-    saveData(newData);
-    setData(newData);
+    await handleSetData(newData);
     setShowVictoryModal(false);
   };
 
   if (storageError) {
     return <StorageError />;
+  }
+
+  if (authLoading || dataLoading) {
+    return <LoadingScreen />;
   }
 
   const currentDay = data?.challenge?.startDate
@@ -84,21 +129,29 @@ function App() {
 
   return (
     <div className="min-h-screen bg-black">
+      {/* Auth Button - Top Right */}
+      <AuthButton
+        user={user}
+        isGuest={isGuest}
+        isConfigured={isConfigured}
+        onSignIn={() => setShowAuthModal(true)}
+      />
+
       <Header data={data} currentDay={currentDay} progressPercent={progressPercent} />
 
       {data && (
-        <TabNavigation 
-          tabs={TABS} 
-          activeTab={activeTab} 
-          onTabChange={setActiveTab} 
+        <TabNavigation
+          tabs={TABS}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
         />
       )}
 
       <main className="max-w-lg mx-auto px-4 py-8">
         {!data ? (
-          <TasksTab data={data} setData={setData} onStartChallenge={handleStartChallenge} />
+          <TasksTab data={data} setData={handleSetData} onStartChallenge={handleStartChallenge} />
         ) : (
-          <TabContent activeTab={activeTab} data={data} setData={setData} />
+          <TabContent activeTab={activeTab} data={data} setData={handleSetData} />
         )}
       </main>
 
@@ -108,6 +161,10 @@ function App() {
 
       {showVictoryModal && (
         <VictoryModal data={data} onClose={handleVictoryClose} />
+      )}
+
+      {showAuthModal && (
+        <AuthModal onClose={() => setShowAuthModal(false)} />
       )}
     </div>
   );
@@ -124,6 +181,14 @@ function calculateProgress(data) {
 }
 
 // Sub-components
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="text-gray-500 text-sm">Loading...</div>
+    </div>
+  );
+}
+
 function StorageError() {
   return (
     <div className="min-h-screen bg-black flex items-center justify-center p-4">
@@ -133,6 +198,38 @@ function StorageError() {
           This app requires localStorage. Please use regular browsing mode.
         </p>
       </div>
+    </div>
+  );
+}
+
+function AuthButton({ user, isGuest, isConfigured, onSignIn }) {
+  const { signOut } = useAuth();
+
+  // Don't show if Supabase isn't configured
+  if (!isConfigured) return null;
+
+  return (
+    <div className="fixed top-4 right-4 z-40">
+      {isGuest ? (
+        <button
+          onClick={onSignIn}
+          className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-gray-800 hover:border-gray-700 rounded-lg transition-all"
+        >
+          Sign In
+        </button>
+      ) : (
+        <div className="flex items-center gap-3">
+          <span className="text-gray-500 text-sm hidden sm:inline">
+            {user?.email}
+          </span>
+          <button
+            onClick={signOut}
+            className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-gray-800 hover:border-gray-700 rounded-lg transition-all"
+          >
+            Sign Out
+          </button>
+        </div>
+      )}
     </div>
   );
 }

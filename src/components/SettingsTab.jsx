@@ -5,17 +5,25 @@ import {
   updateRules,
   resetChallenge,
   clearAllData,
+  clearCloudData,
   calculateCurrentDay,
+  migrateToCloud,
 } from "../utils/storage";
+import { useAuth } from "../contexts/AuthContext";
 import { ConfirmModal, ModalOverlay, ModalContainer } from "./ui/Modal";
 import { RulesEditor } from "./ui/RulesEditor";
+import AuthModal from "./AuthModal";
 
 function SettingsTab({ data, setData }) {
+  const { user, isGuest, isConfigured, signOut } = useAuth();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showDateConfirm, setShowDateConfirm] = useState(false);
   const [pendingDate, setPendingDate] = useState(null);
   const [showEditRules, setShowEditRules] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [migrating, setMigrating] = useState(false);
+  const [migrateMessage, setMigrateMessage] = useState(null);
 
   const currentDay = calculateCurrentDay(data.challenge.startDate);
 
@@ -35,8 +43,11 @@ function SettingsTab({ data, setData }) {
     setShowResetConfirm(false);
   };
 
-  const handleClearAllData = () => {
+  const handleClearAllData = async () => {
     clearAllData();
+    if (user && isConfigured) {
+      await clearCloudData(user.id);
+    }
     setData(null);
     setShowClearConfirm(false);
   };
@@ -49,8 +60,71 @@ function SettingsTab({ data, setData }) {
     setShowEditRules(false);
   };
 
+  const handleMigrateToCloud = async () => {
+    if (!user) return;
+    setMigrating(true);
+    setMigrateMessage(null);
+    const result = await migrateToCloud(user.id);
+    setMigrateMessage(result);
+    setMigrating(false);
+  };
+
   return (
     <div className="space-y-6">
+      {/* Account Section - Only show if Supabase is configured */}
+      {isConfigured && (
+        <SettingsCard title="Account" variant="accent">
+          {isGuest ? (
+            <>
+              <p className="text-gray-400 text-sm mb-4">
+                Sign up to sync your progress across devices and never lose your data.
+              </p>
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="w-full py-3 bg-white text-black font-medium rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Sign Up to Sync
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-white text-sm">{user.email}</p>
+                  <p className="text-green-500 text-xs mt-1">✓ Syncing to cloud</p>
+                </div>
+                <button
+                  onClick={signOut}
+                  className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-gray-800 hover:border-gray-700 rounded-lg transition-all"
+                >
+                  Sign Out
+                </button>
+              </div>
+              
+              {migrateMessage && (
+                <div className={`p-3 rounded-lg mb-4 ${
+                  migrateMessage.success 
+                    ? "bg-green-950/30 border border-green-800" 
+                    : "bg-red-950/30 border border-red-800"
+                }`}>
+                  <p className={migrateMessage.success ? "text-green-400 text-sm" : "text-red-400 text-sm"}>
+                    {migrateMessage.message || migrateMessage.error}
+                  </p>
+                </div>
+              )}
+
+              <button
+                onClick={handleMigrateToCloud}
+                disabled={migrating}
+                className="w-full py-3 border border-gray-700 text-gray-300 rounded-lg hover:border-gray-600 hover:text-white transition-all disabled:opacity-50"
+              >
+                {migrating ? "Syncing..." : "Sync Local Data to Cloud"}
+              </button>
+            </>
+          )}
+        </SettingsCard>
+      )}
+
       {/* Change Start Date */}
       <SettingsCard title="Change Start Date">
         <p className="text-gray-400 text-sm mb-4">
@@ -152,17 +226,25 @@ function SettingsTab({ data, setData }) {
           onClose={() => setShowEditRules(false)}
         />
       )}
+
+      {showAuthModal && (
+        <AuthModal onClose={() => setShowAuthModal(false)} />
+      )}
     </div>
   );
 }
 
 function SettingsCard({ title, variant = "default", children }) {
-  const borderClass = variant === "danger" ? "border-red-900/50" : "border-gray-800";
-  const titleClass = variant === "danger" ? "text-red-500" : "text-gray-500";
-  
+  const variants = {
+    default: { border: "border-gray-800", title: "text-gray-500" },
+    danger: { border: "border-red-900/50", title: "text-red-500" },
+    accent: { border: "border-gray-700", title: "text-white" },
+  };
+  const style = variants[variant] || variants.default;
+
   return (
-    <div className={`border ${borderClass} rounded-lg p-4`}>
-      <h3 className={`text-xs ${titleClass} uppercase tracking-wider mb-4`}>{title}</h3>
+    <div className={`border ${style.border} rounded-lg p-4`}>
+      <h3 className={`text-xs ${style.title} uppercase tracking-wider mb-4`}>{title}</h3>
       {children}
     </div>
   );
