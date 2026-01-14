@@ -23,7 +23,7 @@ function StatsTab({ data }) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `75-smart-rules-backup-${new Date().toISOString().split('T')[0]}.json`
+    a.download = `75-smart-backup-${new Date().toISOString().split('T')[0]}.json`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -37,63 +37,62 @@ function StatsTab({ data }) {
   return (
     <div className="space-y-6">
       {/* Overview Stats */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-3">
         <StatCard
           label="Current Day"
           value={Math.min(currentDay, 75)}
-          sublabel="of 75"
-          color="indigo"
+          sublabel="/ 75"
         />
         <StatCard
           label="Current Streak"
           value={data.challenge.currentStreak}
           sublabel="days"
-          color="green"
         />
         <StatCard
           label="Longest Streak"
           value={data.challenge.longestStreak}
           sublabel="days"
-          color="amber"
         />
         <StatCard
           label="Total Resets"
           value={data.challenge.totalResets}
           sublabel="times"
-          color="red"
         />
       </div>
 
       {/* Completion Rate */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-sm font-medium text-gray-700">Overall Completion Rate</span>
-          <span className="text-lg font-bold text-indigo-600">{completionRate}%</span>
+      <div className="border border-gray-800 rounded-lg p-4">
+        <div className="flex justify-between items-center mb-3">
+          <span className="text-xs text-gray-500 uppercase tracking-wider">Completion Rate</span>
+          <span className="text-lg font-medium text-white">{completionRate}%</span>
         </div>
-        <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+        <div className="h-[2px] bg-gray-800 rounded-full overflow-hidden">
           <div
-            className="h-full bg-indigo-500 transition-all duration-300"
+            className="h-full bg-white transition-all duration-500"
             style={{ width: `${completionRate}%` }}
           />
         </div>
-        <p className="text-xs text-gray-500 mt-2">
+        <p className="text-xs text-gray-600 mt-3">
           {completeDays} complete days out of {totalDaysLogged} logged
         </p>
       </div>
 
       {/* Per-Rule Breakdown */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <h3 className="text-sm font-medium text-gray-700 mb-4">Task Breakdown</h3>
-        <div className="space-y-3">
-          {ruleStats.map((rule) => (
+      <div className="border border-gray-800 rounded-lg p-4">
+        <h3 className="text-xs text-gray-500 uppercase tracking-wider mb-4">Task Breakdown</h3>
+        <div className="space-y-4">
+          {ruleStats.map((rule, index) => (
             <div key={rule.id}>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-gray-600 truncate pr-2">{rule.text}</span>
-                <span className="text-gray-900 font-medium">{rule.percentage}%</span>
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-gray-400 truncate pr-2">
+                  <span className="text-gray-600 mr-2">{String(index + 1).padStart(2, '0')}</span>
+                  {rule.text}
+                </span>
+                <span className="text-white font-medium">{rule.percentage}%</span>
               </div>
-              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-[2px] bg-gray-800 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-indigo-400 transition-all duration-300"
+                  className="h-full bg-gray-500 transition-all duration-500"
                   style={{ width: `${rule.percentage}%` }}
                 />
               </div>
@@ -105,29 +104,22 @@ function StatsTab({ data }) {
       {/* Export */}
       <button
         onClick={handleExport}
-        className="w-full py-3 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2"
+        className="w-full py-3 border border-gray-800 text-gray-500 rounded-lg hover:border-gray-700 hover:text-gray-400 flex items-center justify-center gap-2 transition-all"
       >
         <span>↓</span>
-        Export Data (JSON)
+        Export Data
       </button>
     </div>
   )
 }
 
-function StatCard({ label, value, sublabel, color }) {
-  const colors = {
-    indigo: 'bg-indigo-50 text-indigo-600',
-    green: 'bg-green-50 text-green-600',
-    amber: 'bg-amber-50 text-amber-600',
-    red: 'bg-red-50 text-red-600',
-  }
-
+function StatCard({ label, value, sublabel }) {
   return (
-    <div className={`rounded-lg p-4 ${colors[color]}`}>
-      <p className="text-xs opacity-75">{label}</p>
-      <p className="text-2xl font-bold">
+    <div className="border border-gray-800 rounded-lg p-4">
+      <p className="text-xs text-gray-600 uppercase tracking-wider">{label}</p>
+      <p className="text-2xl font-medium text-white mt-1">
         {value}
-        <span className="text-sm font-normal ml-1">{sublabel}</span>
+        <span className="text-sm text-gray-600 ml-1">{sublabel}</span>
       </p>
     </div>
   )

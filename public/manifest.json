@@ -1,11 +1,11 @@
 {
-  "name": "75 Smart Rules",
+  "name": "75 Smart",
   "short_name": "75 Smart",
   "description": "Personal habit accountability app for 75-day challenges",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f9fafb",
-  "theme_color": "#4f46e5",
+  "background_color": "#000000",
+  "theme_color": "#000000",
   "icons": [
     {
       "src": "/icon-192.png",

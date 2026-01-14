@@ -1,249 +1,229 @@
-import { useState } from 'react'
-import { saveData, getTodayKey, DEFAULT_RULES, updateRules } from '../utils/storage'
-import EditRulesModal from './EditRulesModal'
-import quotes from '../../quotes.json'
+import { useState } from "react";
+import { format } from "date-fns";
+import { saveData, getTodayKey, DEFAULT_RULES, checkForWarning } from "../utils/storage";
+import { RulesEditor } from "./ui/RulesEditor";
+import quotes from "../../quotes.json";
 
 function TasksTab({ data, setData, onStartChallenge }) {
-  const [quote] = useState(() => quotes[Math.floor(Math.random() * quotes.length)])
-  const [showEditModal, setShowEditModal] = useState(false)
+  const [quote] = useState(() => quotes[Math.floor(Math.random() * quotes.length)]);
+  const [warningDismissed, setWarningDismissed] = useState(false);
 
-  // Onboarding: No data yet
   if (!data) {
-    return <Onboarding onStart={onStartChallenge} />
+    return <Onboarding onStart={onStartChallenge} />;
   }
 
-  const todayKey = getTodayKey()
-  const todayLog = data.dailyLogs[todayKey] || { completed: [], allComplete: false, reflection: '' }
-  const completedIds = todayLog.completed
+  const todayKey = getTodayKey();
+  const todayLog = data.dailyLogs[todayKey] || { completed: [], allComplete: false, reflection: "" };
+  const completedIds = todayLog.completed;
+  const warningCheck = checkForWarning(data);
+  const showWarning = warningCheck.showWarning && !warningDismissed;
 
   const handleToggleTask = (ruleId) => {
     const newCompleted = completedIds.includes(ruleId)
       ? completedIds.filter((id) => id !== ruleId)
-      : [...completedIds, ruleId]
+      : [...completedIds, ruleId];
 
-    const allComplete = newCompleted.length === data.rules.length
+    const allComplete = newCompleted.length === data.rules.length;
+    const wasComplete = todayLog.allComplete;
+
+    const streakDelta = allComplete && !wasComplete ? 1 : !allComplete && wasComplete ? -1 : 0;
 
     const newData = {
       ...data,
       dailyLogs: {
         ...data.dailyLogs,
-        [todayKey]: {
-          ...todayLog,
-          completed: newCompleted,
-          allComplete,
-        },
+        [todayKey]: { ...todayLog, completed: newCompleted, allComplete },
       },
       challenge: {
         ...data.challenge,
-        currentStreak: allComplete
-          ? data.challenge.currentStreak + (todayLog.allComplete ? 0 : 1)
-          : todayLog.allComplete
-          ? data.challenge.currentStreak - 1
-          : data.challenge.currentStreak,
-        longestStreak: allComplete
-          ? Math.max(data.challenge.longestStreak, data.challenge.currentStreak + (todayLog.allComplete ? 0 : 1))
-          : data.challenge.longestStreak,
+        currentStreak: data.challenge.currentStreak + streakDelta,
+        longestStreak: Math.max(
+          data.challenge.longestStreak,
+          data.challenge.currentStreak + streakDelta
+        ),
       },
-    }
+    };
 
-    saveData(newData)
-    setData(newData)
-  }
+    saveData(newData);
+    setData(newData);
+  };
 
   const handleReflectionChange = (e) => {
     const newData = {
       ...data,
       dailyLogs: {
         ...data.dailyLogs,
-        [todayKey]: {
-          ...todayLog,
-          reflection: e.target.value,
-        },
+        [todayKey]: { ...todayLog, reflection: e.target.value },
       },
-    }
-    saveData(newData)
-    setData(newData)
-  }
-
-  const handleSaveRules = (newRules) => {
-    const newData = updateRules(data, newRules)
-    setData(newData)
-  }
-
-  const progress = (completedIds.length / data.rules.length) * 100
+    };
+    saveData(newData);
+    setData(newData);
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Quote */}
-      <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-100">
-        <p className="text-indigo-900 italic">"{quote.text}"</p>
-        <p className="text-indigo-600 text-sm mt-1">— {quote.author}</p>
-      </div>
+    <div className="space-y-8">
+      {/* Warning Banner */}
+      {showWarning && (
+        <WarningBanner onDismiss={() => setWarningDismissed(true)} />
+      )}
 
-      {/* Progress Bar */}
-      <div>
-        <div className="flex justify-between text-sm text-gray-600 mb-1">
-          <span>Today's Progress</span>
-          <span>{completedIds.length}/{data.rules.length}</span>
-        </div>
-        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-indigo-500 transition-all duration-300"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      </div>
+      {/* Quote */}
+      <Quote text={quote.text} author={quote.author} />
 
       {/* Task List */}
-      <div className="space-y-2">
-        {data.rules.map((rule) => {
-          const isCompleted = completedIds.includes(rule.id)
-          return (
-            <label
-              key={rule.id}
-              className={`flex items-center p-4 bg-white rounded-lg border cursor-pointer transition-all ${
-                isCompleted
-                  ? 'border-green-300 bg-green-50'
-                  : 'border-gray-200 hover:border-indigo-300'
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={isCompleted}
-                onChange={() => handleToggleTask(rule.id)}
-                className="w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              <span
-                className={`ml-3 ${
-                  isCompleted ? 'text-green-700 line-through' : 'text-gray-700'
-                }`}
-              >
-                {rule.text}
-              </span>
-            </label>
-          )
-        })}
-      </div>
+      <TaskList
+        rules={data.rules}
+        completedIds={completedIds}
+        onToggle={handleToggleTask}
+      />
 
       {/* All Complete Message */}
-      {todayLog.allComplete && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-          <p className="text-green-700 font-medium">
-            All tasks complete for today!
-          </p>
-        </div>
-      )}
+      {todayLog.allComplete && <CompletionMessage />}
 
       {/* Reflection */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Daily Reflection (optional)
-        </label>
-        <textarea
-          value={todayLog.reflection}
-          onChange={handleReflectionChange}
-          placeholder="How did today go? Any wins or challenges?"
-          rows={3}
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
-        />
-      </div>
-
-      {/* Edit Rules Button */}
-      <button
-        onClick={() => setShowEditModal(true)}
-        className="w-full py-2 text-gray-500 hover:text-gray-700 text-sm border border-gray-200 rounded-lg hover:bg-gray-50"
-      >
-        Edit Rules
-      </button>
-
-      {/* Edit Rules Modal */}
-      {showEditModal && (
-        <EditRulesModal
-          rules={data.rules}
-          onSave={handleSaveRules}
-          onClose={() => setShowEditModal(false)}
-        />
-      )}
+      <ReflectionInput
+        value={todayLog.reflection}
+        onChange={handleReflectionChange}
+      />
     </div>
-  )
+  );
+}
+
+// Sub-components
+function WarningBanner({ onDismiss }) {
+  return (
+    <div className="bg-amber-950/30 border border-amber-800 rounded-lg p-4 flex items-start gap-3">
+      <span className="text-amber-500 text-lg">⚠</span>
+      <div className="flex-1">
+        <p className="text-amber-200 text-sm font-medium">You missed yesterday</p>
+        <p className="text-amber-400/80 text-xs mt-1">
+          Miss another day and your challenge resets to Day 0.
+        </p>
+      </div>
+      <button
+        onClick={onDismiss}
+        className="text-amber-600 hover:text-amber-400 text-lg leading-none"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+function Quote({ text, author }) {
+  return (
+    <div className="border-l-2 border-gray-800 pl-4 py-2">
+      <p className="text-gray-400 text-sm italic leading-relaxed">"{text}"</p>
+      <p className="text-gray-600 text-xs mt-2">— {author}</p>
+    </div>
+  );
+}
+
+function TaskList({ rules, completedIds, onToggle }) {
+  return (
+    <div className="space-y-3">
+      {rules.map((rule, index) => {
+        const isCompleted = completedIds.includes(rule.id);
+        return (
+          <label
+            key={rule.id}
+            className={`flex items-center gap-4 p-4 rounded-lg border cursor-pointer transition-all ${
+              isCompleted
+                ? "border-gray-700 bg-gray-900/50"
+                : "border-gray-800 hover:border-gray-700 bg-transparent"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={isCompleted}
+              onChange={() => onToggle(rule.id)}
+              className="flex-shrink-0"
+            />
+            <div className="flex-1 min-w-0">
+              <span className="text-gray-600 text-xs mr-2">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <span className={`text-sm ${isCompleted ? "text-gray-500 line-through" : "text-gray-200"}`}>
+                {rule.text}
+              </span>
+            </div>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+function CompletionMessage() {
+  return (
+    <div className="text-center py-6 border border-gray-800 rounded-lg">
+      <p className="text-white font-medium">All tasks complete</p>
+      <p className="text-gray-600 text-sm mt-1">Great work today.</p>
+    </div>
+  );
+}
+
+function ReflectionInput({ value, onChange }) {
+  return (
+    <div>
+      <label className="block text-gray-500 text-xs uppercase tracking-wider mb-3">
+        Daily Reflection
+      </label>
+      <textarea
+        value={value}
+        onChange={onChange}
+        placeholder="How did today go?"
+        rows={3}
+        className="w-full px-4 py-3 rounded-lg text-sm focus:ring-0 focus:border-gray-600"
+      />
+    </div>
+  );
 }
 
 function Onboarding({ onStart }) {
-  const [rules, setRules] = useState(DEFAULT_RULES)
+  const [startDate, setStartDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
-  const handleStart = () => {
-    if (rules.length < 3) {
-      alert('Please add at least 3 rules')
-      return
-    }
-    const emptyRules = rules.filter(r => !r.text.trim())
-    if (emptyRules.length > 0) {
-      alert('Please fill in all rules')
-      return
-    }
-    onStart(rules)
-  }
+  const handleSave = (rules) => {
+    onStart(rules, startDate);
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="text-center">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
-          Welcome to 75 Smart Rules
-        </h2>
-        <p className="text-gray-600">
+        <p className="text-gray-500 text-sm">
           Define 3-8 daily rules for your 75-day challenge.
-          <br />
-          Here's a suggested template for knowledge workers:
         </p>
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="space-y-2">
-          {rules.map((rule, index) => (
-            <div key={rule.id} className="flex items-center gap-2">
-              <span className="text-gray-400 text-sm w-6">{index + 1}.</span>
-              <input
-                type="text"
-                value={rule.text}
-                onChange={(e) => {
-                  const newRules = [...rules]
-                  newRules[index] = { ...rule, text: e.target.value }
-                  setRules(newRules)
-                }}
-                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              />
-              {rules.length > 3 && (
-                <button
-                  onClick={() => setRules(rules.filter((_, i) => i !== index))}
-                  className="text-red-500 hover:text-red-700 px-2"
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {rules.length < 8 && (
-          <button
-            onClick={() =>
-              setRules([...rules, { id: Date.now(), text: '' }])
-            }
-            className="mt-3 text-indigo-600 hover:text-indigo-800 text-sm"
-          >
-            + Add another rule
-          </button>
-        )}
+      {/* Start Date */}
+      <div>
+        <label className="block text-gray-500 text-xs uppercase tracking-wider mb-3">
+          Start Date
+        </label>
+        <input
+          type="date"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+          className="w-full px-4 py-3 rounded-lg text-sm bg-gray-900 border border-gray-800 text-white focus:ring-0 focus:border-gray-600 [color-scheme:dark]"
+        />
+        <p className="text-gray-600 text-xs mt-2">
+          When do you want to start your 75-day journey?
+        </p>
       </div>
 
-      <button
-        onClick={handleStart}
-        className="w-full py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-      >
-        Start 75-Day Challenge
-      </button>
+      {/* Rules Editor */}
+      <div>
+        <label className="block text-gray-500 text-xs uppercase tracking-wider mb-3">
+          Your Rules
+        </label>
+        <RulesEditor
+          initialRules={DEFAULT_RULES}
+          onSave={handleSave}
+          saveButtonText="Start Challenge"
+        />
+      </div>
     </div>
-  )
+  );
 }
 
-export default TasksTab
+export default TasksTab;

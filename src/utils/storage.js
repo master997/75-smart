@@ -1,57 +1,83 @@
-import { format, differenceInDays, parseISO, subDays } from 'date-fns'
+import { format, differenceInDays, parseISO, subDays } from "date-fns";
 
-const STORAGE_KEY = '75smartrules'
+const STORAGE_KEY = "75smartrules";
+const DATE_FORMAT = "yyyy-MM-dd";
 
-const DEFAULT_RULES = [
-  { id: 1, text: 'Deep Learning Session 1 (30-45 min)' },
-  { id: 2, text: 'Deep Learning Session 2 (30-45 min)' },
-  { id: 3, text: '15 min Meta-Learning' },
-  { id: 4, text: 'Create 1 Intellectual Output' },
-  { id: 5, text: 'Read 10 Pages Non-Fiction' },
-  { id: 6, text: 'No Low-Value Dopamine Before 8pm' },
-]
+export const DEFAULT_RULES = [
+  { id: 1, text: "Deep Learning Session 1 (30-45 min)" },
+  { id: 2, text: "Deep Learning Session 2 (30-45 min)" },
+  { id: 3, text: "15 min Meta-Learning" },
+  { id: 4, text: "Create 1 Intellectual Output" },
+  { id: 5, text: "Read 10 Pages Non-Fiction" },
+  { id: 6, text: "No Low-Value Dopamine Before 8pm" },
+];
 
-function getDefaultData() {
-  return {
-    rules: [],
-    challenge: {
-      startDate: null,
-      currentDay: 0,
-      currentStreak: 0,
-      longestStreak: 0,
-      totalResets: 0,
-      failureFund: 0,
-    },
-    dailyLogs: {},
-  }
-}
+// Helper to format date consistently
+const formatDate = (date) => {
+  if (!date) return format(new Date(), DATE_FORMAT);
+  if (typeof date === "string") return date;
+  return format(date, DATE_FORMAT);
+};
 
-export function loadData() {
+// Helper to get day log for a specific date
+const getDayLog = (data, date) => {
+  const key = format(date, DATE_FORMAT);
+  return data.dailyLogs[key];
+};
+
+// Core storage operations
+export const loadData = () => {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (!stored) return null
-    return JSON.parse(stored)
-  } catch (error) {
-    console.error('Failed to load data:', error)
-    return null
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
   }
-}
+};
 
-export function saveData(data) {
+export const saveData = (data) => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-    return true
-  } catch (error) {
-    console.error('Failed to save data:', error)
-    return false
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    return true;
+  } catch {
+    return false;
   }
-}
+};
 
-export function initializeData(rules = DEFAULT_RULES, startDate = new Date()) {
+export const clearAllData = () => {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const isStorageAvailable = () => {
+  try {
+    const test = "__storage_test__";
+    localStorage.setItem(test, test);
+    localStorage.removeItem(test);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+// Date utilities
+export const getTodayKey = () => format(new Date(), DATE_FORMAT);
+
+export const calculateCurrentDay = (startDate) => {
+  if (!startDate) return 0;
+  return differenceInDays(new Date(), parseISO(startDate)) + 1;
+};
+
+// Initialize new challenge
+export const initializeData = (rules = DEFAULT_RULES, startDate = null) => {
   const data = {
-    rules: rules,
+    rules,
     challenge: {
-      startDate: format(startDate, 'yyyy-MM-dd'),
+      startDate: formatDate(startDate),
       currentDay: 1,
       currentStreak: 0,
       longestStreak: 0,
@@ -59,88 +85,100 @@ export function initializeData(rules = DEFAULT_RULES, startDate = new Date()) {
       failureFund: 0,
     },
     dailyLogs: {},
-  }
-  saveData(data)
-  return data
-}
+  };
+  saveData(data);
+  return data;
+};
 
-export function getTodayKey() {
-  return format(new Date(), 'yyyy-MM-dd')
-}
+// Challenge status checks
+export const checkForReset = (data) => {
+  if (!data?.challenge?.startDate) return { needsReset: false };
 
-export function calculateCurrentDay(startDate) {
-  if (!startDate) return 0
-  const start = parseISO(startDate)
-  const today = new Date()
-  return differenceInDays(today, start) + 1
-}
+  const today = new Date();
+  const currentDay = calculateCurrentDay(data.challenge.startDate);
+  
+  if (currentDay <= 2) return { needsReset: false };
 
-export function isStorageAvailable() {
-  try {
-    const test = '__storage_test__'
-    localStorage.setItem(test, test)
-    localStorage.removeItem(test)
-    return true
-  } catch (e) {
-    return false
-  }
-}
+  const yesterdayLog = getDayLog(data, subDays(today, 1));
+  const dayBeforeLog = getDayLog(data, subDays(today, 2));
 
-export function checkForReset(data) {
-  if (!data || !data.challenge.startDate) return { needsReset: false }
+  const bothDaysMissed = 
+    (!yesterdayLog || !yesterdayLog.allComplete) &&
+    (!dayBeforeLog || !dayBeforeLog.allComplete);
 
-  const today = new Date()
-  const yesterday = subDays(today, 1)
-  const dayBefore = subDays(today, 2)
+  return bothDaysMissed 
+    ? { needsReset: true, missedDays: 2 } 
+    : { needsReset: false };
+};
 
-  const yesterdayKey = format(yesterday, 'yyyy-MM-dd')
-  const dayBeforeKey = format(dayBefore, 'yyyy-MM-dd')
+export const checkForWarning = (data) => {
+  if (!data?.challenge?.startDate) return { showWarning: false };
 
-  const yesterdayLog = data.dailyLogs[yesterdayKey]
-  const dayBeforeLog = data.dailyLogs[dayBeforeKey]
+  const today = new Date();
+  const currentDay = calculateCurrentDay(data.challenge.startDate);
+  
+  if (currentDay <= 1) return { showWarning: false };
 
-  // Check if both yesterday and day before were incomplete
-  const yesterdayIncomplete = !yesterdayLog || !yesterdayLog.allComplete
-  const dayBeforeIncomplete = !dayBeforeLog || !dayBeforeLog.allComplete
+  const yesterdayLog = getDayLog(data, subDays(today, 1));
+  const dayBeforeLog = getDayLog(data, subDays(today, 2));
 
-  // Only trigger reset if we're past day 2 and both days were missed
-  const currentDay = calculateCurrentDay(data.challenge.startDate)
-  if (currentDay > 2 && yesterdayIncomplete && dayBeforeIncomplete) {
-    return { needsReset: true, missedDays: 2 }
+  const yesterdayIncomplete = !yesterdayLog || !yesterdayLog.allComplete;
+  const dayBeforeComplete = dayBeforeLog?.allComplete === true;
+
+  // Warning: missed yesterday but not day before (first miss)
+  if (yesterdayIncomplete && (currentDay <= 2 || dayBeforeComplete)) {
+    return { showWarning: true, missedYesterday: true };
   }
 
-  return { needsReset: false }
-}
+  return { showWarning: false };
+};
 
-export function resetChallenge(data) {
+// Challenge modifications
+export const resetChallenge = (data) => {
   const newData = {
     ...data,
     challenge: {
       ...data.challenge,
-      startDate: format(new Date(), 'yyyy-MM-dd'),
+      startDate: formatDate(),
       currentDay: 1,
       currentStreak: 0,
       totalResets: data.challenge.totalResets + 1,
     },
-  }
-  saveData(newData)
-  return newData
-}
+  };
+  saveData(newData);
+  return newData;
+};
 
-export function updateRules(data, newRules) {
+export const updateStartDate = (data, newDate) => {
+  const newData = {
+    ...data,
+    challenge: {
+      ...data.challenge,
+      startDate: formatDate(newDate),
+    },
+  };
+  saveData(newData);
+  return newData;
+};
+
+export const updateRules = (data, newRules) => {
   const newData = {
     ...data,
     rules: newRules,
     challenge: {
       ...data.challenge,
-      startDate: format(new Date(), 'yyyy-MM-dd'),
+      startDate: formatDate(),
       currentDay: 1,
       currentStreak: 0,
       totalResets: data.challenge.totalResets + 1,
     },
-  }
-  saveData(newData)
-  return newData
-}
+  };
+  saveData(newData);
+  return newData;
+};
 
-export { DEFAULT_RULES }
+export const updateRulesWithoutReset = (data, newRules) => {
+  const newData = { ...data, rules: newRules };
+  saveData(newData);
+  return newData;
+};
