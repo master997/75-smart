@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { loadData, initializeData, isStorageAvailable, calculateCurrentDay, checkForReset, resetChallenge } from './utils/storage'
 import TasksTab from './components/TasksTab'
+import CalendarTab from './components/CalendarTab'
+import StatsTab from './components/StatsTab'
 import ResetModal from './components/ResetModal'
 
 function App() {
@@ -123,14 +125,10 @@ function App() {
               <TasksTab data={data} setData={setData} />
             )}
             {activeTab === 'calendar' && (
-              <div className="text-center py-12 text-gray-500">
-                Calendar coming soon...
-              </div>
+              <CalendarTab data={data} />
             )}
             {activeTab === 'stats' && (
-              <div className="text-center py-12 text-gray-500">
-                Stats coming soon...
-              </div>
+              <StatsTab data={data} />
             )}
           </>
         )}
