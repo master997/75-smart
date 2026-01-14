@@ -36,6 +36,14 @@ function StatsTab({ data }) {
 
   return (
     <div className="space-y-6">
+      {/* Lifetime Completions - Highlighted */}
+      {(data.challenge.totalCompletions || 0) > 0 && (
+        <div className="bg-white/5 border border-white/20 rounded-xl p-6 text-center">
+          <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">75 Smarts Completed</p>
+          <p className="text-4xl font-bold text-white">{data.challenge.totalCompletions}</p>
+        </div>
+      )}
+
       {/* Overview Stats */}
       <div className="grid grid-cols-2 gap-3">
         <StatCard
@@ -50,12 +58,12 @@ function StatsTab({ data }) {
         />
         <StatCard
           label="Longest Streak"
-          value={data.challenge.longestStreak}
+          value={data.challenge.longestStreak || 0}
           sublabel="days"
         />
         <StatCard
           label="Total Resets"
-          value={data.challenge.totalResets}
+          value={data.challenge.totalResets || 0}
           sublabel="times"
         />
       </div>

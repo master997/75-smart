@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   loadData,
   saveData,
@@ -8,6 +8,8 @@ import {
   checkForReset,
   resetChallenge,
   getTodayKey,
+  completeChallenge,
+  clearAllData,
 } from "./utils/storage";
 import TasksTab from "./components/TasksTab";
 import CalendarTab from "./components/CalendarTab";
@@ -23,44 +25,56 @@ const TABS = [
   { id: "settings", label: "Settings" },
 ];
 
+// Compute initial state once before first render
+function getInitialState() {
+  if (!isStorageAvailable()) {
+    return {
+      storageError: true,
+      data: null,
+      showResetModal: false,
+      showVictoryModal: false,
+      missedDays: 0,
+    };
+  }
+
+  const stored = loadData();
+  let showResetModal = false;
+  let showVictoryModal = false;
+  let missedDays = 0;
+
+  if (stored) {
+    const resetCheck = checkForReset(stored);
+    if (resetCheck.needsReset) {
+      missedDays = resetCheck.missedDays;
+      showResetModal = true;
+    }
+
+    const day = calculateCurrentDay(stored.challenge.startDate);
+    if (day >= 75 && !stored.victoryShown) {
+      showVictoryModal = true;
+    }
+  }
+
+  return {
+    storageError: false,
+    data: stored,
+    showResetModal,
+    showVictoryModal,
+    missedDays,
+  };
+}
+
 function App() {
+  const [initial] = useState(getInitialState);
   const [activeTab, setActiveTab] = useState("tasks");
-  const [data, setData] = useState(null);
-  const [storageError, setStorageError] = useState(false);
-  const [showResetModal, setShowResetModal] = useState(false);
-  const [showVictoryModal, setShowVictoryModal] = useState(false);
-  const [missedDays, setMissedDays] = useState(0);
-  const [loading, setLoading] = useState(true);
-
-  // Load data on mount
-  useEffect(() => {
-    if (!isStorageAvailable()) {
-      setStorageError(true);
-      setLoading(false);
-      return;
-    }
-
-    const stored = loadData();
-
-    if (stored) {
-      // Check for 2-day reset condition
-      const resetCheck = checkForReset(stored);
-      if (resetCheck.needsReset) {
-        setMissedDays(resetCheck.missedDays);
-        setShowResetModal(true);
-      }
-
-      // Check for victory
-      const day = calculateCurrentDay(stored.challenge.startDate);
-      if (day >= 75 && !stored.victoryShown) {
-        setShowVictoryModal(true);
-      }
-
-      setData(stored);
-    }
-
-    setLoading(false);
-  }, []);
+  const [data, setData] = useState(initial.data);
+  const [storageError] = useState(initial.storageError);
+  const [showResetModal, setShowResetModal] = useState(initial.showResetModal);
+  const [showVictoryModal, setShowVictoryModal] = useState(
+    initial.showVictoryModal
+  );
+  const [missedDays] = useState(initial.missedDays);
+  const [preservedStats, setPreservedStats] = useState(null);
 
   const handleSetData = (newData) => {
     setData(newData);
@@ -68,7 +82,8 @@ function App() {
   };
 
   const handleStartChallenge = (rules, startDate) => {
-    const newData = initializeData(rules, startDate);
+    const newData = initializeData(rules, startDate, preservedStats);
+    setPreservedStats(null);
     handleSetData(newData);
   };
 
@@ -83,12 +98,18 @@ function App() {
     setShowVictoryModal(false);
   };
 
+  const handleVictoryStartNew = () => {
+    // Get stats to preserve for next challenge
+    const stats = completeChallenge(data);
+    setPreservedStats(stats);
+    // Clear data to go to onboarding
+    clearAllData();
+    setData(null);
+    setShowVictoryModal(false);
+  };
+
   if (storageError) {
     return <StorageError />;
-  }
-
-  if (loading) {
-    return <LoadingScreen />;
   }
 
   const currentDay = data?.challenge?.startDate
@@ -99,7 +120,11 @@ function App() {
 
   return (
     <div className="min-h-screen bg-black">
-      <Header data={data} currentDay={currentDay} progressPercent={progressPercent} />
+      <Header
+        data={data}
+        currentDay={currentDay}
+        progressPercent={progressPercent}
+      />
 
       {data && (
         <TabNavigation
@@ -111,18 +136,33 @@ function App() {
 
       <main className="max-w-lg mx-auto px-4 py-8">
         {!data ? (
-          <TasksTab data={data} setData={handleSetData} onStartChallenge={handleStartChallenge} />
+          <TasksTab
+            data={data}
+            setData={handleSetData}
+            onStartChallenge={handleStartChallenge}
+          />
         ) : (
-          <TabContent activeTab={activeTab} data={data} setData={handleSetData} />
+          <TabContent
+            activeTab={activeTab}
+            data={data}
+            setData={handleSetData}
+          />
         )}
       </main>
 
       {showResetModal && (
-        <ResetModal missedDays={missedDays} onAcknowledge={handleResetAcknowledge} />
+        <ResetModal
+          missedDays={missedDays}
+          onAcknowledge={handleResetAcknowledge}
+        />
       )}
 
       {showVictoryModal && (
-        <VictoryModal data={data} onClose={handleVictoryClose} />
+        <VictoryModal
+          data={data}
+          onClose={handleVictoryClose}
+          onStartNew={handleVictoryStartNew}
+        />
       )}
     </div>
   );
@@ -139,14 +179,6 @@ function calculateProgress(data) {
 }
 
 // Sub-components
-function LoadingScreen() {
-  return (
-    <div className="min-h-screen bg-black flex items-center justify-center">
-      <div className="text-gray-500 text-sm">Loading...</div>
-    </div>
-  );
-}
-
 function StorageError() {
   return (
     <div className="min-h-screen bg-black flex items-center justify-center p-4">
@@ -191,12 +223,16 @@ function Header({ data, currentDay, progressPercent }) {
 
             <div className="mt-8 flex items-center justify-center gap-8 text-gray-500">
               <div>
-                <span className="text-white text-2xl font-medium">{Math.min(currentDay, 75)}</span>
+                <span className="text-white text-2xl font-medium">
+                  {Math.min(currentDay, 75)}
+                </span>
                 <span className="text-sm ml-1">/ 75 days</span>
               </div>
               <div className="w-px h-6 bg-gray-800" />
               <div>
-                <span className="text-white text-2xl font-medium">{data.challenge.currentStreak}</span>
+                <span className="text-white text-2xl font-medium">
+                  {data.challenge.currentStreak}
+                </span>
                 <span className="text-sm ml-1">streak</span>
               </div>
             </div>
@@ -217,7 +253,9 @@ function TabNavigation({ tabs, activeTab, onTabChange }) {
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
               className={`py-4 text-sm tracking-wide transition-all ${
-                activeTab === tab.id ? "text-white" : "text-gray-600 hover:text-gray-400"
+                activeTab === tab.id
+                  ? "text-white"
+                  : "text-gray-600 hover:text-gray-400"
               }`}
             >
               {tab.label}

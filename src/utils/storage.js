@@ -82,15 +82,16 @@ export const calculateCurrentDay = (startDate) => {
 // CHALLENGE OPERATIONS
 // ============================================
 
-export const initializeData = (rules = DEFAULT_RULES, startDate = null) => {
+export const initializeData = (rules = DEFAULT_RULES, startDate = null, preserveStats = null) => {
   const data = {
     rules,
     challenge: {
       startDate: formatDate(startDate),
       currentDay: 1,
       currentStreak: 0,
-      longestStreak: 0,
-      totalResets: 0,
+      longestStreak: preserveStats?.longestStreak || 0,
+      totalResets: preserveStats?.totalResets || 0,
+      totalCompletions: preserveStats?.totalCompletions || 0,
       failureFund: 0,
     },
     dailyLogs: {},
@@ -190,4 +191,13 @@ export const updateRulesWithoutReset = (data, newRules) => {
   const newData = { ...data, rules: newRules };
   saveData(newData);
   return newData;
+};
+
+export const completeChallenge = (data) => {
+  // Increment completion counter and return stats for new challenge
+  return {
+    totalCompletions: (data.challenge.totalCompletions || 0) + 1,
+    longestStreak: Math.max(data.challenge.longestStreak || 0, data.challenge.currentStreak || 0),
+    totalResets: data.challenge.totalResets || 0,
+  };
 };
