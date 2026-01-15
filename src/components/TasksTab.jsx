@@ -189,10 +189,25 @@ function Onboarding({ onStart }) {
 
   return (
     <div className="space-y-8">
-      <div className="text-center">
-        <p className="text-gray-500 text-sm">
-          Define 3-8 daily rules for your 75-day challenge.
+      {/* Welcome & Explanation */}
+      <div className="border border-gray-800 rounded-lg p-4 space-y-4">
+        <h2 className="text-white font-medium">Welcome to 75 Smart</h2>
+        <p className="text-gray-400 text-sm leading-relaxed">
+          A 75-day mental discipline challenge. Define 3-8 daily rules and complete
+          them every day. Miss one day and you get a warning. Miss two consecutive
+          days and you reset to Day 0.
         </p>
+        <div className="flex flex-wrap gap-4 text-xs text-gray-500">
+          <span className="flex items-center gap-1">
+            <span className="text-green-500">✓</span> 75 days
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="text-amber-500">!</span> 1 day grace
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="text-red-500">×</span> 2 days = reset
+          </span>
+        </div>
       </div>
 
       {/* Start Date */}

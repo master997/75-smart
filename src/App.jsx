@@ -15,6 +15,7 @@ import TasksTab from "./components/TasksTab";
 import CalendarTab from "./components/CalendarTab";
 import StatsTab from "./components/StatsTab";
 import SettingsTab from "./components/SettingsTab";
+import AboutTab from "./components/AboutTab";
 import ResetModal from "./components/ResetModal";
 import VictoryModal from "./components/VictoryModal";
 
@@ -22,6 +23,7 @@ const TABS = [
   { id: "tasks", label: "Tasks" },
   { id: "calendar", label: "Calendar" },
   { id: "stats", label: "Stats" },
+  { id: "about", label: "About" },
   { id: "settings", label: "Settings" },
 ];
 
@@ -276,6 +278,8 @@ function TabContent({ activeTab, data, setData }) {
       return <CalendarTab data={data} />;
     case "stats":
       return <StatsTab data={data} />;
+    case "about":
+      return <AboutTab />;
     case "settings":
       return <SettingsTab data={data} setData={setData} />;
     default:
