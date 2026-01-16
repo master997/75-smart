@@ -188,7 +188,20 @@ export const updateRules = (data, newRules) => {
 };
 
 export const updateRulesWithoutReset = (data, newRules) => {
-  const newData = { ...data, rules: newRules };
+  const newRuleIds = new Set(newRules.map(r => r.id));
+
+  // Clean up dailyLogs to only keep IDs that exist in new rules
+  const cleanedLogs = {};
+  for (const [dateKey, log] of Object.entries(data.dailyLogs || {})) {
+    const filteredCompleted = (log.completed || []).filter(id => newRuleIds.has(id));
+    cleanedLogs[dateKey] = {
+      ...log,
+      completed: filteredCompleted,
+      allComplete: filteredCompleted.length === newRules.length,
+    };
+  }
+
+  const newData = { ...data, rules: newRules, dailyLogs: cleanedLogs };
   saveData(newData);
   return newData;
 };
